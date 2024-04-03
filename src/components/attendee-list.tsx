@@ -7,36 +7,101 @@ import { Table } from './table/table'
 import { TableHeader } from './table/table-header'
 import { TableCell } from './table/table-cell'
 import { TableRow } from './table/table-row'
-import { ChangeEvent, useState } from 'react'
-import { attendees } from '../data/attedees'
+import { ChangeEvent, useEffect, useState } from 'react'
 
 dayjs.extend(relativeTime)
 dayjs.locale('pt-br')
 
+interface Attendee {
+  id: string
+  name: string
+  email: string
+  createAt: string
+  checkedInAt: string | null
+}
+
 export function AttendeeList() {
-  const [search, setSeach] = useState("")
-  const [page, setPage] = useState(1)
-  const totalPages = Math.ceil(attendees.length/10)
+  const [search, setSearch] = useState(() => {
+    const url = new URL(window.location.toString())
 
-  function onSeachInputChange(event: ChangeEvent<HTMLInputElement>){
-    setSeach(event.target.value)
+    if(url.searchParams.has('search')){
+      return url.searchParams.get('search') ?? ''
+    }
+    return ''
+  })
+
+  const [page, setPage] = useState(() =>{
+    const url = new URL(window.location.toString())
+
+    if(url.searchParams.has('page')){
+      return Number(url.searchParams.get('page'))
+    }
+    return 1
+  })
+
+  const [total, setTotal] = useState(0)
+  const [attendees, setAttendees] = useState<Attendee[]>([])
+
+  const totalPages = Math.ceil(total/10)
+
+  useEffect(() => {
+    const url = new URL('http://localhost:3333/events/9e9bd979-9d10-4915-b339-3786b1634f33/attendees')
+
+    url.searchParams.set('pageIndex', String(page -1))
+
+    if (search.length > 1){
+      url.searchParams.set('query', search)
+    }  
+
+    fetch(url)
+    .then((response) => response.json())
+    .then((data) => {
+      setAttendees(data.attendees)
+      setTotal(data.total)
+    })
+  }, [page, search])
+
+  function setCurrentSearch(search: string){
+    const url = new URL(window.location.toString())
+
+    url.searchParams.set('search', search)
+
+    window.history.pushState({}, "", url)
+
+    setSearch(search)
   }
 
-  function goToNextPage(){
-    setPage(page + 1)
+  function setCurrentPage(page:number){
+    const url = new URL(window.location.toString())
+
+    url.searchParams.set('page', String(page))
+
+    window.history.pushState({}, "", url)
+
+    setPage(page)
   }
 
-  function goToPreviousPage(){
-    setPage(page - 1)
+  function onSearchInputChanged(event: ChangeEvent<HTMLInputElement>){
+    setCurrentSearch(event.target.value)
+    setCurrentPage(1)
   }
 
   function goToFirstPge(){
-    setPage(1)
+    setCurrentPage(1)
   }
 
   function goTolastPge(){
-    setPage(totalPages)
+    setCurrentPage(totalPages)
   }
+
+  function goToPreviousPage(){
+    setCurrentPage(page - 1)
+  }
+
+  function goToNextPage(){
+    setCurrentPage(page + 1)
+  }
+  
 
   return (
     <div className='flex flex-col gap-4'>
@@ -44,58 +109,78 @@ export function AttendeeList() {
         <h1 className="text-2xl font-bold">Participantes</h1>
         <div className="px-3 w-72 py-1.5 border border-white/10  rounded-lg flex items-center gap-3">
           <Search className='size-4 text-emerald-300'/>
-          <input onChange={onSeachInputChange} className="bg-transparent flex-1 outline-none h-auto border-0 p-0 text-sm" placeholder="Buscar participante..." />
+          <input 
+          onChange={onSearchInputChanged} 
+          value={search}
+          className="bg-transparent flex-1 outline-none h-auto border-0 p-0 text-sm focus:ring-0" placeholder="Buscar participante..." />
         </div>
-        {search}
       </div>
-        <Table>
-          <thead>
-            <tr className='border-b  border-white/10'>
-              <TableHeader style={{width: 48}} className='py-3 px-4 text-sm font-semibold text-left'>
-                <input type="checkbox" className='sixe-4 bg-black/20 rounded border border-white/10 accent-orange-400' />
-              </TableHeader>
-              <TableHeader >Código</TableHeader>
-              <TableHeader >Participante</TableHeader>
-              <TableHeader >Data de inscrição</TableHeader>
-              <TableHeader >Data do check-in</TableHeader>
-              <TableHeader style={{width: 64}} className='py-3 px-4 text-sm font-semibold text-left'></TableHeader>
-            </tr>
-          </thead>
-          <tbody>
-            {attendees.slice((page - 1) * 10, page * 10).map((attedee) => {
-              return(
-                <TableRow key={attedee.id} className='border-b border-white/10'>
-                  <TableCell >
-                    <div>
-                      <input type="checkbox" className='sixe-4 bg-black/20 rounded border border-white/10 accent-orange-400' />
-                    </div>
-                  </TableCell>
-                  <TableCell >123456</TableCell>
-                  <TableCell >
-                    <div className='flex flex-col gap-1'>
-                      <span className='font-semibold text-white'>{attedee.name}</span>
-                      <span>{attedee.email}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell >{dayjs().to(attedee.createAt)}</TableCell>
-                  <TableCell >{dayjs().to(attedee.checkedInAt)}</TableCell>
-                  <TableCell >
-                    <IconButton transparent={true}>
-                      <MoreHorizontal className='size-4'/>
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </tbody>
-          <tfoot>
-            <tr>
-              <TableCell className='py-3 px-4 text-sm text-zinc-300' colSpan={3}>
-                Mostrando 10 de {attendees.length}
-              </TableCell>
-              <td className='py-3 px-4 text-sm text-zinc-300 text-right' colSpan={3}>
+
+      <Table>
+        <thead>
+          <tr className='border-b  border-white/10'>
+            <TableHeader style={{width: 48}}>
+              <input 
+                type="checkbox" 
+                className='sixe-4 bg-black/20 rounded border border-white/10' 
+              />
+            </TableHeader>
+            <TableHeader >Código</TableHeader>
+            <TableHeader >Participante</TableHeader>
+            <TableHeader >Data de inscrição</TableHeader>
+            <TableHeader >Data do check-in</TableHeader>
+            <TableHeader style={{width: 64}}></TableHeader>
+          </tr>
+        </thead>
+        <tbody>
+          {attendees.map((attedee) => {
+            return(
+              <TableRow key={attedee.id}>
+                <TableCell >
+                  <input 
+                    type="checkbox" 
+                    className='sixe-4 bg-black/20 rounded border border-white/10'
+                  />
+                </TableCell>
+                <TableCell >{attedee.id}</TableCell>
+                <TableCell >
+                  <div className='flex flex-col gap-1'>
+                    <span className='font-semibold text-white'>
+                      {attedee.name}
+                    </span>
+                    <span>{attedee.email}</span>
+                  </div>
+                </TableCell>
+                <TableCell >{dayjs().to(attedee.createAt)}</TableCell>
+                <TableCell>
+                  {attedee.checkedInAt === null ? (
+                    <span className='text-zinc-500'>Não fez check-in</span> 
+                  ) : (
+                    dayjs().to(attedee.checkedInAt)
+                  )}
+                </TableCell>
+                <TableCell>
+                  <IconButton 
+                    transparent 
+                    className="bg-black/20 border border-white/10 rounded-md p-1.5"
+                  >
+                    <MoreHorizontal className='size-4'/>
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </tbody>
+        <tfoot>
+          <tr>
+            <TableCell colSpan={3}>
+              Mostrando {attendees.length} de {total} itens
+            </TableCell>
+            <TableCell className='text-right' colSpan={3}>
               <div className='inline-flex items-center gap-8'>
-                <span>Página {page} de {totalPages}</span>
+                <span>
+                  Página {page} de {totalPages}
+                </span>
 
                 <div className='flex gap-1.5'>
                   <IconButton onClick={goToFirstPge} disabled={page === 1}>
@@ -112,10 +197,10 @@ export function AttendeeList() {
                   </IconButton>
                 </div>
               </div>
-              </td>
-            </tr>
-          </tfoot>
-        </Table>
+            </TableCell>
+          </tr>
+        </tfoot>
+      </Table>
     </div>
   )
 }
